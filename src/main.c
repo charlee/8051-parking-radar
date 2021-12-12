@@ -1,9 +1,9 @@
 #include <8052.h>
 
 
-#define LED_R P3_7
-#define LED_G P3_6
-#define LED_B P3_5
+#define LED_R P3_5
+#define LED_Y P3_6
+#define LED_G P3_7
 
 #define TRIG P3_4
 
@@ -20,6 +20,9 @@
 #define T1_INTERVAL 2000
 #define reset_T1() { TL1 = (65536 - T1_INTERVAL) % 256; TH1 = (65536 - T1_INTERVAL) / 256; }
 
+#define FAR 1
+#define NEAR 0
+
 
 
 __code unsigned char sevenseg_hex[] = {
@@ -33,25 +36,55 @@ __code unsigned char sevenseg_hex[] = {
 // distance in centimeter, maximum 400 (HC-SR01 limit)
 unsigned int distance = 400;
 
+// used for debouncing distance change
+unsigned int prev_dist_type = FAR;
+unsigned int dist_type_change_counter = 0;
+
 unsigned char digits[4];
 
 
 void show() {
+  ET1 = 0;
   digits[2] = distance % 10;
   digits[1] = (distance / 10) % 10;
   digits[0] = distance / 100;
+  ET1 = 1;
+}
+
+unsigned char get_distance_type(unsigned int dist) {
+  if (dist > 120) {
+    return FAR;
+  } else {
+    return NEAR;
+  }
+
 }
 
 void set_leds() {
-  if (distance > 150) {
-    LED_G = 0;
-    LED_R = 1;
-  } else if (distance > 80) {
-    LED_G = 0;
-    LED_R = 0;
-  } else {
+  unsigned char dist_type = get_distance_type(distance);
+  // turn of everything if further than 2 meters
+  if (distance > 200) {
     LED_G = 1;
-    LED_R = 0;
+    LED_R = 1;
+    GROUP = 0xff;
+    SEGS = 0xff;
+    ET1 = 0;
+  } else {
+
+    ET1 = 1;
+    if (distance > 120) {
+      LED_R = 1;
+      LED_Y = 1;
+      LED_G = 0;
+    } else if (distance > 90) {
+      LED_R = 1;
+      LED_Y = 0;
+      LED_G = 1;
+    } else {
+      LED_R = 0;
+      LED_Y = 1;
+      LED_G = 1;
+    }
   }
 }
 
@@ -64,7 +97,7 @@ void init() {
   // Turn off LEDs
   LED_G = 1;
   LED_R = 1;
-  LED_B = 1;
+  LED_Y = 1;
 
   TRIG = 0;
 
@@ -115,7 +148,7 @@ void main() {
   while(1) {
     show();
     set_leds();
-    delay(50000);
+    delay(30000);
     start_detect_distance();
   }
 
@@ -125,12 +158,25 @@ void main() {
  * Ultrasound sensor echo input
  */
 void echo_stop_trigger() __interrupt 0 {
+  unsigned int measure;
+  unsigned char measure_type;
 
   // echo triggered, stop timer0 and output distance
   EX0 = 0;
   TR0 = 0;
 
-  distance = (TH0 * 256 + TL0) / 29;
+  measure = (TH0 * 256 + TL0) / 29;
+  measure_type = get_distance_type(measure);
+
+  if (measure_type == prev_dist_type) {
+    distance = measure;
+  } else if (dist_type_change_counter >= 2) {
+    distance = measure;
+    prev_dist_type = measure_type;
+    dist_type_change_counter = 0;
+  } else {
+    dist_type_change_counter++;
+  }
 }
 
 /**
