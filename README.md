@@ -51,3 +51,7 @@ If you need `make` command, please install it with [chololatey](https://chocolat
 
 Download the generated `parking-radar.hex` to your MCS51 MCU.
 
+
+## Case
+
+The case is 3D printed. You can find the STL files and the Sketchup source file in the [3dmodels](3dmodels) directory.
