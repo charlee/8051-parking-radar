@@ -17,7 +17,8 @@
 
 
 // 4ms
-#define T1_INTERVAL 2000
+// use a prime number to prevent flickering when ET1 is off
+#define T1_INTERVAL 2003
 #define reset_T1() { TL1 = (65536 - T1_INTERVAL) % 256; TH1 = (65536 - T1_INTERVAL) / 256; }
 
 #define FAR 1
@@ -42,6 +43,9 @@ unsigned int dist_type_change_counter = 0;
 
 unsigned char digits[4];
 
+// display on/off flag
+unsigned char display_on = 0;
+
 
 void show() {
   ET1 = 0;
@@ -57,21 +61,24 @@ unsigned char get_distance_type(unsigned int dist) {
   } else {
     return NEAR;
   }
-
 }
 
 void set_leds() {
   unsigned char dist_type = get_distance_type(distance);
   // turn of everything if further than 2 meters
   if (distance > 200) {
-    LED_G = 1;
     LED_R = 1;
+    LED_Y = 1;
+    LED_G = 1;
     GROUP = 0xff;
     SEGS = 0xff;
-    ET1 = 0;
+
+    display_on = 0;
+
   } else {
 
-    ET1 = 1;
+    display_on = 1;
+
     if (distance > 120) {
       LED_R = 1;
       LED_Y = 1;
@@ -169,9 +176,13 @@ void echo_stop_trigger() __interrupt 0 {
   measure_type = get_distance_type(measure);
 
   if (measure_type == prev_dist_type) {
+    ET1 = 0;
     distance = measure;
+    ET1 = 1;
   } else if (dist_type_change_counter >= 2) {
+    ET1 = 0;
     distance = measure;
+    ET1 = 1;
     prev_dist_type = measure_type;
     dist_type_change_counter = 0;
   } else {
@@ -194,6 +205,8 @@ unsigned char scan_pos = 0;
  * timer1 is used to handle the 7seg scanning.
  */
 void timer1() __interrupt 3 {
+
+  if (!display_on) return;
 
   SEGS = 0xff;
 
